@@ -31,9 +31,11 @@ app.post('/upload', async (req, res) => {
     const imageBuffer = req.body
     console.log('Imagem recebida via HTTP POST do ESP32')
 
-    const base64Image = imageBuffer.toString('base64')
-    console.log('Imagem em base64:', base64Image.substring(0, 100)) // só os primeiros 100 caracteres
+    // Envia resposta imediatamente
+    res.status(200).send('Imagem recebida')
 
+    // Processa depois
+    const base64Image = imageBuffer.toString('base64')
     const description = await getDescriptionFromOpenAI(base64Image)
     const audioBuffer = await generateAudio(description)
 
@@ -41,13 +43,12 @@ app.post('/upload', async (req, res) => {
       mobileSocket.emit('audio', audioBuffer.toString('base64'))
       console.log('Áudio enviado para o celular via socket')
     }
-
-    res.status(200).send('Imagem processada com sucesso')
   } catch (err) {
     console.error('Erro no endpoint /upload:', err)
-    res.status(500).send('Erro ao processar a imagem')
+    // não envia resposta aqui, pois já foi enviada acima
   }
 })
+
 
 
 let mobileSocket = null
