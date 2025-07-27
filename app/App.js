@@ -4,7 +4,7 @@ import { Audio } from 'expo-av'
 import io from 'socket.io-client'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
-const socket = io('http://192.168.1.8:3001')
+const socket = io('https://vision-x-kdog.onrender.com')
 
 export default function App() {
   const [isPlaying, setIsPlaying] = useState(false)
