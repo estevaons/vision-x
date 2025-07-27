@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simulador ESP32-CAM</title>
+</head>
+<body>
+  <h2>Simulador ESP32-CAM</h2>
+  <input type="file" id="imageInput" accept="image/*" />
+  <button id="sendBtn">Enviar Imagem</button>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    const socket = io('http://localhost:3001');
+
+    socket.on('connect', () => {
+      console.log('Conectado ao servidor como ESP32 simulado');
+      socket.emit('register', 'esp32');
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+      const fileInput = document.getElementById('imageInput');
+      const file = fileInput.files[0];
+
+      if (!file) return alert('Selecione uma imagem primeiro');
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Image = reader.result.split(',')[1];
+        socket.emit('image', base64Image);
+        alert('Imagem enviada!');
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
+</body>
+</html>

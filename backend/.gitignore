@@ -1,0 +1,4 @@
+# .gitignore for backend directory
+/node_modules
+/dist
+/.env
