@@ -23,6 +23,34 @@ const io = socketIo(server, {
 
 app.use(express.static(path.join(__dirname, 'public')))
 
+// Middleware necessário para lidar com binary data
+app.use('/upload', express.raw({ type: 'application/octet-stream', limit: '10mb' }))
+
+app.post('/upload', async (req, res) => {
+  try {
+    const imageBuffer = req.body
+    console.log('Imagem recebida via HTTP POST do ESP32')
+
+    // Envia resposta imediatamente
+    res.status(200).send('Imagem recebida')
+
+    // Processa depois
+    const base64Image = imageBuffer.toString('base64')
+    const description = await getDescriptionFromOpenAI(base64Image)
+    const audioBuffer = await generateAudio(description)
+
+    if (mobileSocket) {
+      mobileSocket.emit('audio', audioBuffer.toString('base64'))
+      console.log('Áudio enviado para o celular via socket')
+    }
+  } catch (err) {
+    console.error('Erro no endpoint /upload:', err)
+    // não envia resposta aqui, pois já foi enviada acima
+  }
+})
+
+
+
 let mobileSocket = null
 
 io.on('connection', (socket) => {
