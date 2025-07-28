@@ -4,8 +4,8 @@ import { Audio } from 'expo-av'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 // Altere para o seu domínio/porta se necessário
-// const socketUrl = 'wss://vision-x-kdog.onrender.com' // use wss:// se for HTTPS
-const socketUrl = 'ws://172.21.28.223:3001'
+const socketUrl = 'wss://vision-x-kdog.onrender.com' // use wss:// se for HTTPS
+// const socketUrl = 'ws://172.21.28.223:3001'
 
 
 export default function App() {
