@@ -1,42 +1,66 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { View, Text, StyleSheet, StatusBar, Animated, Easing } from 'react-native'
 import { Audio } from 'expo-av'
-import io from 'socket.io-client'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
-const socket = io('https://vision-x-kdog.onrender.com')
+// Altere para o seu domínio/porta se necessário
+// const socketUrl = 'wss://vision-x-kdog.onrender.com' // use wss:// se for HTTPS
+const socketUrl = 'ws://172.21.28.223:3001'
+
 
 export default function App() {
   const [isPlaying, setIsPlaying] = useState(false)
   const pulseAnim = useRef(new Animated.Value(1)).current
+  const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-    socket.emit('register', 'mobile')
+    const ws = new WebSocket(socketUrl)
 
-    socket.on('audio', async (base64Audio) => {
-      const audioUri = `data:audio/mp3;base64,${base64Audio}`
+    socketRef.current = ws
 
-      const sound = new Audio.Sound()
+    ws.onopen = () => {
+      console.log('Conectado ao servidor WebSocket')
+      ws.send(JSON.stringify({ type: 'register', role: 'mobile' }))
+    }
+
+    ws.onmessage = async (message) => {
       try {
-        await sound.loadAsync({ uri: audioUri })
-        setIsPlaying(true)
-        animatePulse()
+        const data = JSON.parse(message.data)
 
-        await sound.playAsync()
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (status.didJustFinish) {
-            setIsPlaying(false)
-            pulseAnim.setValue(1)
-            sound.unloadAsync()
-          }
-        })
+        if (data.type === 'audio') {
+          const base64Audio = data.data
+          const audioUri = `data:audio/mp3;base64,${base64Audio}`
+
+          const sound = new Audio.Sound()
+          await sound.loadAsync({ uri: audioUri })
+          setIsPlaying(true)
+          animatePulse()
+
+          await sound.playAsync()
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if (status.didJustFinish) {
+              setIsPlaying(false)
+              pulseAnim.setValue(1)
+              sound.unloadAsync()
+            }
+          })
+        }
       } catch (error) {
-        console.error('Erro ao tocar o áudio:', error)
-        setIsPlaying(false)
+        console.error('Erro ao processar mensagem:', error)
       }
-    })
+    }
 
-    return () => socket.disconnect()
+    ws.onerror = (error) => {
+      console.error('Erro no WebSocket:', error)
+    }
+
+    ws.onclose = () => {
+      console.log('Conexão WebSocket encerrada')
+    }
+
+    return () => {
+      ws.close()
+    }
   }, [])
 
   const animatePulse = () => {
@@ -61,8 +85,6 @@ export default function App() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      
-
 
       <Animated.View style={{ transform: [{ scale: pulseAnim }], marginTop: 40 }}>
         <MaterialCommunityIcons
@@ -105,7 +127,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-
   appDescription: {
     fontSize: 16,
     color: '#ccc',

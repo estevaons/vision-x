@@ -9,13 +9,24 @@
   <input type="file" id="imageInput" accept="image/*" />
   <button id="sendBtn">Enviar Imagem</button>
 
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script>
-    const socket = io('https://vision-x-kdog.onrender.com');
+    // Usa o mesmo host e porta da página para o WebSocket (ajuste se necessário)
+    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${wsProtocol}://${location.host}`;
 
-    socket.on('connect', () => {
-      console.log('Conectado ao servidor como ESP32 simulado');
-      socket.emit('register', 'esp32');
+    const socket = new WebSocket(wsUrl);
+
+    socket.addEventListener('open', () => {
+      console.log('Conectado ao servidor WebSocket');
+      socket.send(JSON.stringify({ type: 'register', role: 'esp32' }));
+    });
+
+    socket.addEventListener('error', (event) => {
+      console.error('Erro no WebSocket:', event);
+    });
+
+    socket.addEventListener('close', () => {
+      console.log('Conexão WebSocket fechada');
     });
 
     document.getElementById('sendBtn').addEventListener('click', () => {
@@ -27,8 +38,17 @@
       const reader = new FileReader();
       reader.onload = () => {
         const base64Image = reader.result.split(',')[1];
-        socket.emit('image', base64Image);
-        alert('Imagem enviada!');
+        const message = {
+          type: 'image',
+          data: base64Image
+        };
+
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(message));
+          alert('Imagem enviada!');
+        } else {
+          alert('WebSocket não está conectado.');
+        }
       };
       reader.readAsDataURL(file);
     });

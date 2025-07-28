@@ -1,106 +1,70 @@
 const express = require('express')
 const http = require('http')
-const socketIo = require('socket.io')
+const WebSocket = require('ws')
 const axios = require('axios')
 const fs = require('fs')
-const { v4: uuidv4 } = require('uuid')
 const path = require('path')
 const { OpenAI } = require('openai')
-
 require('dotenv').config()
-
-
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const app = express()
 const server = http.createServer(app)
-const io = socketIo(server, {
-  cors: {
-    origin: '*'
-  }
-})
+const wss = new WebSocket.Server({ server })
 
 app.use(express.static(path.join(__dirname, 'public')))
 
-// Middleware necessário para lidar com binary data
-app.use('/upload', express.raw({ type: 'application/octet-stream', limit: '10mb' }))
-
-app.post('/upload', async (req, res) => {
-  try {
-    const imageBuffer = req.body
-    console.log('Imagem recebida via HTTP POST do ESP32')
-
-    // Envia resposta imediatamente
-    res.status(200).send('Imagem recebida')
-
-    // Processa depois
-    const base64Image = imageBuffer.toString('base64')
-    const description = await getDescriptionFromOpenAI(base64Image)
-    const audioBuffer = await generateAudio(description)
-
-    if (mobileSocket) {
-      mobileSocket.emit('audio', audioBuffer.toString('base64'))
-      console.log('Áudio enviado para o celular via socket')
-    }
-  } catch (err) {
-    console.error('Erro no endpoint /upload:', err)
-    // não envia resposta aqui, pois já foi enviada acima
-  }
-})
-
-
-
 let mobileSocket = null
 
-io.on('connection', (socket) => {
-  console.log('Novo cliente conectado:', socket.id)
+wss.on('connection', (ws) => {
+  console.log('Novo cliente WebSocket conectado')
 
-  // Identifica se é o celular ou o ESP32
-  socket.on('register', (data) => {
-    if (data === 'mobile') {
-      mobileSocket = socket
-      console.log('Celular conectado')
-    } else if (data === 'esp32') {
-      console.log('ESP32 conectado')
-    }
-  })
-
-  // Recebe imagem do ESP32
-  socket.on('image', async (imageBase64) => {
+  ws.on('message', async (message) => {
     try {
-      console.log('Imagem recebida do ESP32')
+      const parsed = JSON.parse(message)
 
-      const imageBuffer = Buffer.from(imageBase64, 'base64')
-
-      // 1. Enviar para API da OpenAI (ex: GPT-4 Vision)
-      const description = await getDescriptionFromOpenAI(imageBuffer)
-
-      // 2. Gerar áudio com API de TTS (exemplo fictício)
-      const audioBuffer = await generateAudio(description)
-
-      // 3. Enviar para celular
-      if (mobileSocket) {
-        mobileSocket.emit('audio', audioBuffer.toString('base64'))
-        console.log('Áudio enviado para celular')
+      if (parsed.type === 'register') {
+        if (parsed.role === 'mobile') {
+          mobileSocket = ws
+          console.log('Celular registrado')
+        } else if (parsed.role === 'esp32') {
+          console.log('ESP32 registrado')
+        }
       }
 
-    } catch (error) {
-      console.error('Erro no processamento da imagem:', error)
+      if (parsed.type === 'image') {
+        console.log('Imagem recebida do ESP32')
+
+        const imageBuffer = Buffer.from(parsed.data, 'base64')
+        const description = await getDescriptionFromOpenAI(imageBuffer)
+        const audioBuffer = await generateAudio(description)
+
+        if (mobileSocket && mobileSocket.readyState === WebSocket.OPEN) {
+          mobileSocket.send(JSON.stringify({
+            type: 'audio',
+            data: audioBuffer.toString('base64')
+          }))
+          console.log('Áudio enviado ao celular')
+        }
+      }
+
+    } catch (err) {
+      console.error('Erro ao processar mensagem:', err)
     }
   })
 
-  socket.on('disconnect', () => {
-    if (socket === mobileSocket) {
-      console.log('Celular desconectado')
+  ws.on('close', () => {
+    if (ws === mobileSocket) {
       mobileSocket = null
+      console.log('Celular desconectado')
     } else {
-      console.log('Cliente desconectado:', socket.id)
+      console.log('Cliente desconectado')
     }
   })
 })
 
-// integração com API da OpenAI
+// função OpenAI Vision
 async function getDescriptionFromOpenAI(imageBuffer) {
   try {
     const base64Image = imageBuffer.toString('base64')
@@ -136,7 +100,7 @@ async function getDescriptionFromOpenAI(imageBuffer) {
   }
 }
 
-// geração de áudio (TTS)
+// função TTS
 async function generateAudio(text) {
   try {
     const response = await openai.audio.speech.create({
@@ -152,7 +116,6 @@ async function generateAudio(text) {
     return fs.readFileSync('./audio-exemplo.mp3')
   }
 }
-
 
 const PORT = process.env.PORT || 3001
 server.listen(PORT, () => {
