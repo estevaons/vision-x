@@ -33,26 +33,32 @@ const char *password = "123789Cfm@";
 
 WebSocketsClient webSocket;
 
+SemaphoreHandle_t resourceMutex;
+
 void videoStreamTask(void *pvParameters) {
     Serial.println("Task de stream de vídeo iniciada.");
     for (;;) {
+        if (xSemaphoreTake(resourceMutex, portMAX_DELAY) == pdTRUE) {
+            if (webSocket.isConnected()) {
+                camera_fb_t *fb = esp_camera_fb_get();
+                if (fb) {
+                    StaticJsonDocument<256> doc;
+                    doc["type"] = "video_frame";
 
-        if (webSocket.isConnected()) {
-            camera_fb_t *fb = esp_camera_fb_get();
-            if (fb) {
-                StaticJsonDocument<256> doc;
-                doc["type"] = "video_frame";
+                    String imageBase64 = base64::encode(fb->buf, fb->len);
+                    doc["data"] = imageBase64;
 
-                String imageBase64 = base64::encode(fb->buf, fb->len);
-                doc["data"] = imageBase64;
+                    String jsonString;
+                    serializeJson(doc, jsonString);
+                    webSocket.sendTXT(jsonString);
 
-                String jsonString;
-                serializeJson(doc, jsonString);
-                webSocket.sendTXT(jsonString);
-
-                esp_camera_fb_return(fb);
+                    esp_camera_fb_return(fb);
+                }
             }
         }
+
+        xSemaphoreGive(resourceMutex);
+
         // Pausa a task por 100ms para controlar o FPS (~10 frames por segundo)
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
@@ -116,6 +122,12 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    resourceMutex = xSemaphoreCreateMutex();
+    if (resourceMutex == NULL) {
+        Serial.println("Erro ao criar o Mutex!");
+        // Trava aqui se não conseguir criar, pois o sistema não funcionará corretamente.
+        while(1);
+    }
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
         delay(1000);
@@ -146,30 +158,39 @@ void setup() {
 
 void sendAnalysisImage() {
     Serial.println("Enviando imagem para análise.");
-    if (WiFi.status() == WL_CONNECTED) {
-        camera_fb_t *fb = NULL;
-        fb = esp_camera_fb_get();
-        if (!fb) {
-            Serial.println("Camera capture failed");
-            return;
+
+    if (xSemaphoreTake(resourceMutex, portMAX_DELAY) == pdTRUE) {
+        if (WiFi.status() == WL_CONNECTED) {
+            camera_fb_t *fb = NULL;
+            fb = esp_camera_fb_get();
+            if (!fb) {
+                Serial.println("Camera capture failed");
+                xSemaphoreGive(resourceMutex);
+                return;
+            }
+
+            String imageBase64 = base64::encode(fb->buf, fb->len);
+            esp_camera_fb_return(fb);
+
+            DynamicJsonDocument doc(50000);
+
+            doc["type"] = "image";
+            doc["data"] = imageBase64;
+
+            String jsonString;
+            serializeJson(doc, jsonString);
+            webSocket.sendTXT(jsonString);
+
+            xSemaphoreGive(resourceMutex);
         }
-
-        String imageBase64 = base64::encode(fb->buf, fb->len);
-
-        DynamicJsonDocument doc(50000);
-
-        doc["type"] = "image";
-        doc["data"] = imageBase64;
-
-        String jsonString;
-        serializeJson(doc, jsonString);
-        webSocket.sendTXT(jsonString);
-        esp_camera_fb_return(fb);
     }
 }
 
 void loop() {
-    webSocket.loop();
+    if (xSemaphoreTake(resourceMutex, (TickType_t)10) == pdTRUE) {
+        webSocket.loop();
+        xSemaphoreGive(resourceMutex);
+    }
 
     int currentButtonState = digitalRead(buttonReaderPin);
 

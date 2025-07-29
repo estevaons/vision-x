@@ -16,6 +16,8 @@ const wss = new WebSocket.Server({ server })
 app.use(express.static(path.join(__dirname, 'public')))
 
 let mobileSocket = null
+let esp32Socket = null;
+let viewerSockets = new Set();
 
 wss.on('connection', (ws) => {
   console.log('Novo cliente WebSocket conectado')
@@ -29,7 +31,11 @@ wss.on('connection', (ws) => {
           mobileSocket = ws
           console.log('Celular registrado')
         } else if (parsed.role === 'esp32') {
+            esp32Socket = ws;
           console.log('ESP32 registrado')
+        }  else if (parsed.role === 'viewer') {
+          viewerSockets.add(ws);
+          console.log('Novo visualizador de stream registrado.');
         }
       }
 
@@ -49,6 +55,16 @@ wss.on('connection', (ws) => {
         }
       }
 
+      if (parsed.type === 'video_frame') {
+        const imageBuffer = Buffer.from(parsed.data, 'base64');
+        viewerSockets.forEach(socket => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(imageBuffer);
+            }
+        });
+
+      }
+
     } catch (err) {
       console.error('Erro ao processar mensagem:', err)
     }
@@ -58,8 +74,12 @@ wss.on('connection', (ws) => {
     if (ws === mobileSocket) {
       mobileSocket = null
       console.log('Celular desconectado')
-    } else {
-      console.log('Cliente desconectado')
+    } else if (ws === esp32Socket) {
+        esp32Socket = null;
+        console.log('ESP32 desconectado.');
+    } else if (viewerSockets.has(ws)) {
+        viewerSockets.delete(ws);
+        console.log('Visualizador de stream desconectado.');
     }
   })
 })
@@ -77,7 +97,7 @@ async function getDescriptionFromOpenAI(imageBuffer) {
           content: [
             {
               type: 'text',
-              text: 'Descreva a imagem de forma clara e objetiva, como se estivesse explicando para uma pessoa com deficiência visual.'
+              text: 'Você é um assistente visual para pessoas com deficiência visual. Sua tarefa é descrever a imagem fornecida de forma clara e concisa. Concentre-se nos elementos essenciais e na ação principal da imagem. Ignore cores e detalhes minuciosos, a menos que sejam absolutamente necessários para o entendimento da cena. Não descreva o fundo ou elementos decorativos que não contribuam para a compreensão geral do que está acontecendo. Sua resposta deve ser direta e objetiva, fornecendo apenas as informações mais importantes.'
             },
             {
               type: 'image_url',
