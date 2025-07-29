@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32-CAM Stream</title>
+</head>
+<body>
+    <div class="container">
+        <h1>ESP32-CAM Stream</h1>
+        <img id="videoStream" alt="Aguardando stream de vídeo...">
+    </div>
+
+    <script>
+        const ws_protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws_url = `${ws_protocol}//${window.location.host}`;
+        const websocket = new WebSocket(ws_url);
+        const imgElement = document.getElementById('videoStream');
+
+
+        websocket.binaryType = 'blob';
+
+        websocket.onopen = () => {
+            console.log("Conectado ao servidor WebSocket!");
+
+            websocket.send(JSON.stringify({
+                type: 'register',
+                role: 'viewer' 
+            }));
+        };
+        
+        websocket.onmessage = (event) => {
+            const url = URL.createObjectURL(event.data);
+            imgElement.src = url;
+        };
+
+        websocket.onclose = () => console.log("Desconectado do servidor WebSocket.");
+        websocket.onerror = (error) => console.error("Erro no WebSocket: ", error);
+    </script>
+</body>
+</html>

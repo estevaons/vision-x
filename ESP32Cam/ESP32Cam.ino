@@ -2,8 +2,8 @@
 #include "esp_camera.h"
 
 #include "base64.h"
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+#include <WebSocketsClient.h>
 
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
@@ -28,13 +28,58 @@ const int buttonReferencePin = 2;
 int lastButtonState = HIGH;
 
 const char *hostname = "ESP32CAM";
-const char *ssid = "ssid";
-const char *password = "password";
+const char *ssid = "CLARO110";
+const char *password = "123789Cfm@";
 
-const char *server_url = "vision-x-kdog.onrender.com/upload";
+WebSocketsClient webSocket;
+
+void videoStreamTask(void *pvParameters) {
+    Serial.println("Task de stream de vídeo iniciada.");
+    for (;;) {
+
+        if (webSocket.isConnected()) {
+            camera_fb_t *fb = esp_camera_fb_get();
+            if (fb) {
+                StaticJsonDocument<256> doc;
+                doc["type"] = "video_frame";
+
+                String imageBase64 = base64::encode(fb->buf, fb->len);
+                doc["data"] = imageBase64;
+
+                String jsonString;
+                serializeJson(doc, jsonString);
+                webSocket.sendTXT(jsonString);
+
+                esp_camera_fb_return(fb);
+            }
+        }
+        // Pausa a task por 100ms para controlar o FPS (~10 frames por segundo)
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+}
+
+void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
+    switch (type) {
+    case WStype_DISCONNECTED:
+        Serial.printf("[WSc] Disconnected!\n");
+        break;
+    case WStype_CONNECTED: {
+        Serial.printf("[WSc] Connected to url: %s\n", payload);
+        StaticJsonDocument<256> doc;
+        doc["type"] = "register";
+        doc["role"] = "esp32";
+        String output;
+        serializeJson(doc, output);
+        webSocket.sendTXT(output);
+        break;
+    }
+    case WStype_TEXT:
+        Serial.printf("[WSc] get text: %s\n", payload);
+        break;
+    }
+}
 
 void setupCamera() {
-
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -54,11 +99,9 @@ void setupCamera() {
     config.pin_sscb_scl = SIOC_GPIO_NUM;
     config.pin_pwdn = PWDN_GPIO_NUM;
     config.pin_reset = RESET_GPIO_NUM;
-    config.xclk_freq_hz = 20000000;
+    config.xclk_freq_hz = 23000000;
     config.pixel_format = PIXFORMAT_JPEG;
-
-    config.frame_size =
-        FRAMESIZE_QVGA; // FRAMESIZE_ + QVGA|CIF|VGA|SVGA|XGA|SXGA|UXGA
+    config.frame_size = FRAMESIZE_HVGA;
     config.jpeg_quality = 12;
     config.fb_count = 2;
 
@@ -78,70 +121,63 @@ void setup() {
         delay(1000);
         Serial.println("Connecting to WiFi..");
     }
-
     Serial.println(WiFi.localIP());
 
     setupCamera();
 
+    webSocket.beginSSL("vision-x-kdog.onrender.com", 443, "/");
+    // webSocket.begin("192.168.0.17", 3001,"/"); 
+    webSocket.onEvent(webSocketEvent);
+    webSocket.setReconnectInterval(5000);
+
     pinMode(buttonReferencePin, OUTPUT);
     digitalWrite(buttonReferencePin, LOW);
     pinMode(buttonReaderPin, INPUT_PULLUP);
+
+    xTaskCreatePinnedToCore(videoStreamTask,   // Função da Task
+                            "VideoStreamTask", // Nome da Task
+                            10000,             // Tamanho da pilha (stack size)
+                            NULL,              // Parâmetros da Task
+                            1,                 // Prioridade
+                            NULL,              // Handle da Task
+                            0                  // Core a ser usado (0 ou 1)
+    );
 }
 
-void loop() {
-
-    int currentButtonState = digitalRead(buttonReaderPin);
-
-    if (currentButtonState == LOW && lastButtonState == HIGH) {
-        sendImage();
-        delay(50);
-    }
-
-    lastButtonState = currentButtonState;
-    delay(10);
-}
-
-void sendImage() {
-    Serial.println("Enviando imagem.");
+void sendAnalysisImage() {
+    Serial.println("Enviando imagem para análise.");
     if (WiFi.status() == WL_CONNECTED) {
-
         camera_fb_t *fb = NULL;
-
-        // Take Picture with Camera
         fb = esp_camera_fb_get();
         if (!fb) {
             Serial.println("Camera capture failed");
             return;
         }
 
-        WiFiClientSecure client;
-        HTTPClient http;
+        String imageBase64 = base64::encode(fb->buf, fb->len);
 
-        client.setInsecure();
+        DynamicJsonDocument doc(50000);
 
-        if (http.begin(client, server_url)) {
-            Serial.printf("Conectando a: %s\n", server_url);
+        doc["type"] = "image";
+        doc["data"] = imageBase64;
 
-            http.setTimeout(2000000);
-            http.addHeader("Content-Type", "application/octet-stream");
-
-            int httpResponseCode = http.POST(fb->buf, fb->len);
-
-            if (httpResponseCode > 0) {
-                Serial.printf("Código de resposta HTTP: %d\n",httpResponseCode);
-                String payload = http.getString();
-                Serial.println("Resposta do servidor:");
-                Serial.println(payload);
-            } else {
-                Serial.printf("Erro ao enviar POST. Código de erro: %s\n", http.errorToString(httpResponseCode).c_str());
-            }
-
-
-            http.end();
-        } else {
-            Serial.printf("Não foi possível conectar a: %s\n", server_url);
-        }
-
+        String jsonString;
+        serializeJson(doc, jsonString);
+        webSocket.sendTXT(jsonString);
         esp_camera_fb_return(fb);
     }
+}
+
+void loop() {
+    webSocket.loop();
+
+    int currentButtonState = digitalRead(buttonReaderPin);
+
+    if (currentButtonState == LOW && lastButtonState == HIGH) {
+        sendAnalysisImage();
+        delay(50);
+    }
+
+    lastButtonState = currentButtonState;
+    delay(10);
 }
