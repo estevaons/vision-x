@@ -28,8 +28,8 @@ const int buttonReferencePin = 2;
 int lastButtonState = HIGH;
 
 const char *hostname = "ESP32CAM";
-const char *ssid = "CLARO110";
-const char *password = "123789Cfm@";
+const char *ssid = "ssid";
+const char *password = "password";
 
 WebSocketsClient webSocket;
 
