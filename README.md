@@ -15,3 +15,7 @@ Vision-X é um sistema de assistência para deficientes visuais que combina hard
 * **Inteligência Artificial Avançada:** Utiliza o GPT-4o para descrições de imagem de alta qualidade e contextuais.
 * **Feedback Audível e Intuitivo:** Respostas em áudio com voz natural e uma interface de aplicativo minimalista.
 * **Monitoramento Remoto (para Depuração):** Uma página web permite a visualização do feed de vídeo da câmera para fins de desenvolvimento e testes.
+
+
+
+![Fluxo_de_evento-Vision-x • Arquitetura (Blocos)](https://github.com/user-attachments/assets/23cb5791-8074-49a3-853b-81a52bd223e8)
