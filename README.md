@@ -28,7 +28,7 @@ Fluxo Secundário (Monitoramento via Web):
 
 ## Tecnologias Utilizadas
 
-* Firmware:
+* Firmware (Readme detalhado no repositorio projeto-hardware):
     * Hardware: ESP32-CAM
     * Linguagem: C++ (Arduino Framework)
 
