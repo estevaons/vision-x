@@ -58,7 +58,7 @@ Fluxo Secundário (Monitoramento via Web):
 
 1.  Navegue até a pasta `backend`:
     ```bash
-    cd server/
+    cd backend/
     ```
 2.  Instale as dependências:
     ```bash
@@ -95,9 +95,9 @@ Fluxo Secundário (Monitoramento via Web):
 
 ### 📱 Aplicativo Móvel (Expo)
 
-1.  Navegue até a pasta `mobile`:
+1.  Navegue até a pasta `app`:
     ```bash
-    cd mobile/
+    cd app/
     ```
 2.  Instale as dependências:
     ```bash
