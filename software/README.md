@@ -23,6 +23,10 @@ Este documento fornece uma análise técnica aprofundada, a estrutura do projeto
 
 * **Página Web de Stream:**
     * **Tecnologias:** HTML5, JavaScript (WebSocket API nativa)
+ 
+
+![Fluxo_de_evento-Vision-x • Fluxo do Evento (Sequência) (2)](https://github.com/user-attachments/assets/b9c3c1bf-7896-42f4-b8f6-cd60777f5e7d)
+
 
 ## Configuração e Instalação
 
